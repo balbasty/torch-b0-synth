@@ -275,7 +275,7 @@ def greens(shape, zdim=-1, voxel_size=1, dtype=None, device=None):
             g1 = atan(x * y, z * r)
         else:
             y = g1[..., odim]
-            g1 = atan(z, y)
+            g1 = -atan(z, y)
         if math.prod(shift) < 0:
             g -= g1
         else:
