@@ -50,6 +50,11 @@ mr_chi = {
 }
 
 
+# TODO: FFTs could be a bit more efficient by using rfft/hfft when possible
+#       e.g., the momentum is real -> rfft
+#             the convolution kernel is real + symmetric -> rfft or hfft
+
+
 def fieldmap_to_shift(delta, bandwidth=140):
     """Convert fieldmap to voxel shift map
 
@@ -120,6 +125,27 @@ def labels_to_chi(label_map, label_dict=None,
     return delta
 
 
+def ppm_to_hz(fmap, b0=3, freq=42.576E6):
+    """Convert part-per-million to Hz
+
+    Parameters
+    ----------
+    fmap : tensor
+        Fieldmap in ppm
+    b0 : float, default=3
+        Field strength (Tesla)
+    freq : float, default=42.576E6
+        Larmor frequency (Hz)
+
+    Returns
+    -------
+    fmap : tensor
+        Fieldmap in Hz
+
+    """
+    return fmap * (b0 * freq)
+
+
 def chi_to_fieldmap(
         ds, zdim=-1, dim=None, b0=3, s0=mr_chi['air'],
         s1=mr_chi['water'] - mr_chi['air'], vx=1):
@@ -148,7 +174,7 @@ def chi_to_fieldmap(
     Returns
     -------
     delta_b0 : tensor
-        MR field map (Hz).
+        MR field map (ppm).
 
     References
     ----------
@@ -166,8 +192,8 @@ def chi_to_fieldmap(
 
     dim = dim or ds.dim()
     shape = ds.shape[-dim:]
-    zdim = (ds.dim() + zdim) if zdim < 0 else zdim
-    zdim = zdim - ds.dim()  # number from end so that we can apply to vx
+    zdim = zdim - ds.dim() if zdim >= 0 else zdim
+    # ^ number from end so that we can apply to vx
     vx = torch.as_tensor(vx).flatten().tolist()
     vx += vx[-1:] * max(0, dim - len(vx))
 
@@ -186,7 +212,8 @@ def chi_to_fieldmap(
     # apply rest of the equation
     out = ds * ((1. + s0) / (3. + s0))
     out -= f
-    out *= b0 * s1 / (1 + s0)
+    out *= s1 / (1 + s0)
+
     return out
 
 
@@ -251,7 +278,8 @@ def greens(shape, zdim=-1, voxel_size=1, dtype=None, device=None):
     # make zero-centered meshgrid
     g0 = identity_grid(shape, dtype=dtype, device=device)
     for g1, s in zip(g0.unbind(-1), shape):
-        g1 -= int(math.ceil(s / 2))
+        # g1 -= int(math.ceil(s / 2))
+        g1 -= (s-1) / 2
 
     def shift_and_scale_grid(grid, shift):
         g = grid.clone()
@@ -359,8 +387,9 @@ def diff(x, ndim):
 
 
 def shim(fmap, max_order=2, mask=None, isocenter=None, dim=None,
-         returns='corrected'):
-    """Subtract a linear combination of spherical harmonics that minimize gradients
+         lam_abs=1, lam_grad=10, returns='corrected'):
+    """Subtract a linear combination of spherical harmonics that
+    minimize absolute values and gradients
 
     Parameters
     ----------
@@ -374,6 +403,10 @@ def shim(fmap, max_order=2, mask=None, isocenter=None, dim=None,
         Coordinate of isocenter, in voxels
     dim : int, default=fmap.dim()
         Number of spatial dimensions
+    lam_abs : float, default=1
+        Penalty on absolute values
+    lam_abs : float, default=10
+        Penalty on gradients
     returns : combination of {'corrected', 'correction', 'parameters'}, default='corrected'
         Components to return
 
@@ -398,6 +431,9 @@ def shim(fmap, max_order=2, mask=None, isocenter=None, dim=None,
 
     # compute gradients
     gmap = diff(fmap, dim)
+    gmap = torch.cat([gmap, fmap.unsqueeze(-1)], -1)
+    gmap[..., :-1] *= lam_grad
+    gmap[..., -1] *= lam_abs
     if mask is not None:
         gmap[..., mask, :] = 0
     gmap = gmap.reshape([*batch, -1])   # (*batch, k)
@@ -405,9 +441,13 @@ def shim(fmap, max_order=2, mask=None, isocenter=None, dim=None,
     # compute basis of spherical harmonics
     basis = []
     for i in range(1, max_order + 1):
-        b = spherical_harmonics(shape, i, isocenter, **backend)
-        b = torch.movedim(b, -1, 0)
-        b = diff(b, dim)
+        b0 = spherical_harmonics(shape, i, isocenter, **backend)
+        b0 = torch.movedim(b0, -1, 0)
+        b = diff(b0, dim)
+        b = torch.cat([b, b0.unsqueeze(-1)], -1)
+        del b0
+        b[..., :-1] *= lam_grad
+        b[..., -1] *= lam_abs
         if mask is not None:
             b[..., mask, :] = 0
         b = b.reshape([b.shape[0], *batch, -1])
