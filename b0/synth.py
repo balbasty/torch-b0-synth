@@ -147,7 +147,7 @@ def ppm_to_hz(fmap, b0=3, freq=42.576E6):
 
 
 def chi_to_fieldmap(
-        ds, zdim=-1, dim=None, b0=3, s0=mr_chi['air'],
+        ds, zdim=-1, dim=None, s0=mr_chi['air'],
         s1=mr_chi['water'] - mr_chi['air'], vx=1):
     """Generate a MR fieldmap from a MR susceptibility map.
 
@@ -161,8 +161,6 @@ def chi_to_fieldmap(
         Dimension of the main magnetic field.
     dim : int, default=ds.dim()
         Number of spatial dimensions.
-    b0 : float, default=3
-        Value of the main magnetic field (Tesla)
     s0 : float, default=0.4
         Susceptibility of air (ppm)
     s1 : float, default=-9.5
