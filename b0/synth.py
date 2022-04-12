@@ -91,7 +91,7 @@ def labels_to_chi(label_map, label_dict=None,
     """
     if not label_dict:
         label_dict = {0: 'air', 1: 'water'}
-    unique_labels = label_map.unique()
+    unique_labels = label_map.unique().long().tolist()
 
     dtype = dtype or torch.get_default_dtype()
     delta = torch.empty_like(label_map, dtype=dtype)
@@ -168,8 +168,8 @@ def chi_to_fieldmap(
     shape = ds.shape[-dim:]
     zdim = (ds.dim() + zdim) if zdim < 0 else zdim
     zdim = zdim - ds.dim()  # number from end so that we can apply to vx
-    vx = torch.as_tensor(vx).tolist()
-    vx += vx[:-1] * max(0, dim - len(vx))
+    vx = torch.as_tensor(vx).flatten().tolist()
+    vx += vx[-1:] * max(0, dim - len(vx))
 
     if ds.dtype is torch.bool:
         ds = ds.to(**backend)
@@ -230,8 +230,8 @@ def greens(shape, zdim=-1, voxel_size=1, dtype=None, device=None):
 
     dim = len(list(shape))
     dims = list(range(-dim, 0))
-    voxel_size = torch.as_tensor(voxel_size).tolist()
-    voxel_size += voxel_size[:-1] * max(0, dim - len(voxel_size))
+    voxel_size = torch.as_tensor(voxel_size).flatten().tolist()
+    voxel_size += voxel_size[-1:] * max(0, dim - len(voxel_size))
     zdim = -dim + zdim if zdim >= 0 else zdim  # use negative indexing
 
     if dim not in (2, 3):
@@ -250,7 +250,7 @@ def greens(shape, zdim=-1, voxel_size=1, dtype=None, device=None):
 
     # make zero-centered meshgrid
     g0 = identity_grid(shape, dtype=dtype, device=device)
-    for g1, s in zip(g0, shape):
+    for g1, s in zip(g0.unbind(-1), shape):
         g1 -= int(math.ceil(s / 2))
 
     def shift_and_scale_grid(grid, shift):
@@ -282,10 +282,10 @@ def greens(shape, zdim=-1, voxel_size=1, dtype=None, device=None):
             g += g1
 
     g /= (2 ** (dim-1)) * math.pi
-    g = fft.ifftshift(g, range(dim))  # move center voxel to first voxel
+    g = fft.ifftshift(g, dims)  # move center voxel to first voxel
 
     # fourier transform
-    g = fft.fftn(g, dim=dims)
+    g = fft.fftn(g, dim=dims).real
     return g
 
 
