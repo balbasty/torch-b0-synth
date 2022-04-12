@@ -1,0 +1,14 @@
+name: synth-cpu
+channels:
+  - conda-forge
+  - pytorch
+dependencies:
+  - python=3.8
+  - pytorch=1.8.1
+  - numpy
+  - nibabel
+  - pip
+  - matplotlib
+  - scipy
+  - python-wget
+  - ipython
