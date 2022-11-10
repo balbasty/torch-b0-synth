@@ -28,6 +28,26 @@ def identity_grid(shape, dtype=None, device=None):
     return grid
 
 
+def prod(sequence):
+    """Perform the cumulative product of a sequence of elements.
+    Parameters
+    ----------
+    sequence : any object that implements `__iter__`
+        Sequence of elements for which the `__mul__` operator is defined.
+    Returns
+    -------
+    product : T
+        Product of the elements in the sequence.
+    """
+    accumulate = None
+    for elem in sequence:
+        if accumulate is None:
+            accumulate = elem
+        else:
+            accumulate = accumulate * elem
+    return accumulate
+
+
 def torch_version(mode, version):
     """Check torch version
 

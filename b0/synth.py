@@ -1,6 +1,6 @@
 import torch
 from torch import fft
-from .utils import identity_grid
+from .utils import identity_grid, prod
 import math
 import itertools
 
@@ -302,7 +302,7 @@ def greens(shape, zdim=-1, voxel_size=1, dtype=None, device=None):
         else:
             y = g1[..., odim]
             g1 = atan(y, z)
-        if math.prod(shift) < 0:
+        if prod(shift) < 0:
             g -= g1
         else:
             g += g1
